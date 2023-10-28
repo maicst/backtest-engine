@@ -1,0 +1,3 @@
+pandas==2.1.2
+# TEST
+pytest==7.4.3
