@@ -1,3 +1,7 @@
 pandas==2.1.2
+python-dotenv==1.0.0
+requests==2.31.0
+ta==0.10.11
+boto3==1.28.73
 # TEST
 pytest==7.4.3

@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: cli",
+            "type": "python",
+            "request": "launch",
+            "program": "./cli.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "[CMD] Python: Create BTCUSD pickle",
             "type": "python",
             "request": "launch",
