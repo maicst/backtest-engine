@@ -32,3 +32,7 @@ class OrderStatusNotSupportedException(BaseException):
 # TOKEN
 class UnknownTokenException(BaseException):
     pass
+
+
+class TokenArithmeticsException(BaseException):
+    pass
