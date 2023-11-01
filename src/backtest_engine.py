@@ -1,8 +1,10 @@
 import copy
 from datetime import datetime, timedelta
+import time
 from typing import List
 
 import pandas as pd
+from tqdm import tqdm
 
 from src.markets.mock_market import MockMarket
 from src.models.strategy import StrategyAction, StrategyTestResult
@@ -51,22 +53,26 @@ class StrategyTester:
     def start_strategy_test(self, **params) -> List[TestResult]:
         end_date = timeseries_utils.get_previous_period_end(self.test_date_end, self.period)
         date_range = timeseries_utils.get_period_range(self.test_date_start, end_date, self.period)
-        for execution_date in (self.test_date_start + timedelta(seconds=n) for n in date_range):
-            # update mrkt
-            # create action
-            action = self.strategy.execute(pair=self.pair, execute_date=execution_date, **params)
-            # action to order
-            order = self.strategy.action_to_order(action)
-            # execute order on mrkt
-            created_order = self.market.add_order(execution_date=execution_date, order=order)
-            # get balance
-            account_balance: AccountBalance = self.market.get_account_balance(execution_date=execution_date)
-            execution_date_cp = copy.deepcopy(execution_date)
-            account_balance_cp = copy.deepcopy(account_balance)
-            action_cp = copy.deepcopy(action)
-            # append test result
-            test_res = TestResult(execution_date=execution_date_cp, balance=account_balance_cp, action=action_cp)
-            self.results.append(test_res)
+        
+        with tqdm(total=100, miniters=1) as pbar:
+            for execution_date in (self.test_date_start + timedelta(seconds=n) for n in date_range):
+                # update mrkt
+                # create action
+                action = self.strategy.execute(pair=self.pair, execute_date=execution_date, **params)
+                # action to order
+                order = self.strategy.action_to_order(action)
+                # execute order on mrkt
+                created_order = self.market.add_order(execution_date=execution_date, order=order)
+                # get balance
+                account_balance: AccountBalance = self.market.get_account_balance(execution_date=execution_date)
+                execution_date_cp = copy.deepcopy(execution_date)
+                account_balance_cp = copy.deepcopy(account_balance)
+                action_cp = copy.deepcopy(action)
+                # append test result
+                test_res = TestResult(execution_date=execution_date_cp, balance=account_balance_cp, action=action_cp)
+                self.results.append(test_res)
+                pbar.update(date_range.step / date_range.stop * 100)
+
         return self.results
 
     def test_result_to_df(self, test_result: List[TestResult] = None) -> pd.DataFrame:

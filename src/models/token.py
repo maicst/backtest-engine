@@ -22,6 +22,9 @@ class Token:
     def __str__(self):
         return f"{self.symbol}".upper()
 
+    def __repr__(self):
+        return f"Token[{self.symbol.upper()}]"
+
 
 class Pair:
     base: Token  # BTC
@@ -33,6 +36,9 @@ class Pair:
 
     def __str__(self):
         return f"{self.base.symbol}{self.quote.symbol}".upper()
+
+    def __repr__(self):
+        return f"Pair[{self.base.symbol}{self.quote.symbol}]"
 
 
 class PairSpotPrice:
@@ -57,6 +63,9 @@ class TokenAmount:
 
     def __str__(self):
         return f"{self.amount} {self.token}"
+
+    def __repr__(self):
+        return f"TokenAmount[{self.amount} {self.token}]"
 
     def __eq__(self, other: "TokenAmount") -> bool:
         return self.token == other.token and self.amount == other.amount
