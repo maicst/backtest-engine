@@ -2,6 +2,8 @@ import copy
 from decimal import Decimal
 from typing import Union
 
+from src.utils.exception_utils import TokenArithmeticsException
+
 
 class Token:
     name: str
@@ -40,6 +42,10 @@ class Pair:
     def __repr__(self):
         return f"Pair[{self.base.symbol}{self.quote.symbol}]"
 
+    @property
+    def inverse(self):
+        return Pair(self.quote, self.base)
+
 
 class PairSpotPrice:
     pair: Pair
@@ -51,6 +57,15 @@ class PairSpotPrice:
 
     def __str__(self):
         return f"1 {self.pair.base} = {self.price} {self.pair.quote}"
+
+    def __repr__(self) -> str:
+        return f"PairSpotPrice[1 {self.pair.base} = {self.price} {self.pair.quote}]"
+
+    @property
+    def inverse(self):
+        i_pair = self.pair.inverse
+        i_price = self.price ** -1
+        return PairSpotPrice(pair=i_pair, price=i_price)
 
 
 class TokenAmount:
@@ -71,80 +86,76 @@ class TokenAmount:
         return self.token == other.token and self.amount == other.amount
 
     @staticmethod
-    def _safe_add(first: Union[str, int, float, Decimal, "TokenAmount"],
-                  second: Union[str, int, float, Decimal, "TokenAmount"]) -> Decimal:
-        if isinstance(first, TokenAmount) and isinstance(second, TokenAmount):
-            assert second.token == first.token  # it works only on the same tokens
-            return (first.amount + second.amount).quantize(first.token.min_size)
-        elif isinstance(first, TokenAmount) and not isinstance(second, TokenAmount):
-            return (first.amount + Decimal(str(second))).quantize(first.token.min_size)
-        elif not isinstance(first, TokenAmount) and isinstance(second, TokenAmount):
-            return (Decimal(str(first)) + second.amount).quantize(second.token.min_size)
-        else:
-            print("SHOULD NOT HAPPEN")
-            return Decimal(str(first)) + Decimal(str(second))
+    def _safe_add(first: "TokenAmount", second: "TokenAmount") -> "TokenAmount":
+        if not second.token == first.token:  # it works only on the same tokens
+            raise TokenArithmeticsException(f"Can't sum {first.token} and {second.token}.")
+        return TokenAmount(first.token, (first.amount + second.amount).quantize(first.token.min_size))
 
     @staticmethod
-    def _safe_mul(first: Union[str, int, float, Decimal, "TokenAmount", PairSpotPrice],
-                  second: Union[str, int, float, Decimal, "TokenAmount", PairSpotPrice]) -> Decimal:
-        assert not (isinstance(first, TokenAmount) and isinstance(second, TokenAmount))
-        assert not (isinstance(first, PairSpotPrice) and isinstance(second, PairSpotPrice))
-        if isinstance(first, TokenAmount) and not isinstance(second, PairSpotPrice):
-            return (first.amount * Decimal(str(second))).quantize(first.token.min_size)
-        elif isinstance(first, TokenAmount) and isinstance(second, PairSpotPrice):
-            exp = second.pair.quote.min_size if second.pair.base == first.token else second.pair.base.min_size
-            return (first.amount * second.price).quantize(exp)
-        elif not isinstance(first, PairSpotPrice) and isinstance(second, TokenAmount):
-            return (Decimal(str(first)) * second.amount).quantize(second.token.min_size)
-        elif isinstance(first, PairSpotPrice) and isinstance(second, TokenAmount):
-            pass
-        else:
-            print("SHOULD NOT HAPPEN")
+    def _safe_mul(first: "TokenAmount", second: Union[Decimal, PairSpotPrice]) -> "TokenAmount":
+        if isinstance(second, Decimal):
+            # TokenAmount[5 USD] x 2 = TokenAmount[10 USD]
+            return TokenAmount(first.token, (first.amount * second).quantize(first.token.min_size))
 
-    def __add__(self, other: Union[str, int, float, Decimal, "TokenAmount"]) -> Decimal:
+        if isinstance(second, PairSpotPrice):
+            # TokenAmount[1 BTC] x PairSpotPrice[100 USD x BTC] = TokenAmount[100 USD]
+            if not first.token == second.pair.base:
+                raise TokenArithmeticsException(f"Can't multiply {first.token} and {second.pair.base}.")
+
+            exp = second.pair.quote.min_size
+            return TokenAmount(second.pair.quote, (first.amount * second.price).quantize(exp))
+
+    def __add__(self, other: "TokenAmount") -> "TokenAmount":
+        if not isinstance(other, TokenAmount):
+            raise TokenArithmeticsException()
         return self._safe_add(self, other)
 
-    def __radd__(self, other: Union[str, int, float, Decimal, "TokenAmount"]) -> Decimal:
+    def __radd__(self, other: "TokenAmount") -> "TokenAmount":
         return self.__add__(other)
 
-    def __sub__(self, other: Union[str, int, float, Decimal, "TokenAmount"]) -> Decimal:
+    def __sub__(self, other: "TokenAmount") -> "TokenAmount":
+        if not isinstance(other, TokenAmount):
+            raise TokenArithmeticsException()
+        return self + (-1 * other)
+
+    def __rsub__(self, other: "TokenAmount") -> "TokenAmount":
+        if not isinstance(other, TokenAmount):
+            raise TokenArithmeticsException()
+        return other + (-1 * self)
+
+    def __mul__(self, other: Union[str, int, float, Decimal, PairSpotPrice]) -> "TokenAmount":
         second = copy.deepcopy(other)
-        if isinstance(other, TokenAmount):
-            second.amount = -1 * other
-        elif isinstance(other, str):
-            second = Decimal("-1") * Decimal(other)
-        else:
-            second = -1 * other
-        return self._safe_add(self, second)
+        # Everything to Decimal
+        if isinstance(second, str) or isinstance(second, int) or isinstance(second, float):
+            second = Decimal(f"{second}")
+        # Check type
+        if not isinstance(second, Decimal) and not isinstance(second, PairSpotPrice):
+            raise TokenArithmeticsException(f"Can't multiply {type(self)} x {type(second)}.")
 
-    def __rsub__(self, other: Union[str, int, float, Decimal, "TokenAmount"]) -> Decimal:
-        second = copy.deepcopy(self)
-        if isinstance(self, TokenAmount):
-            second.amount = -1 * self.amount
-        return self._safe_add(other, second)
-
-    def __mul__(self, other: Union[str, int, float, Decimal, PairSpotPrice]) -> Decimal:
-        if isinstance(other, PairSpotPrice):
-            assert self.token == other.pair.base  # 1[BTC] * 50[USD/BTC] = 50[USD]
-        return self._safe_mul(self, other)
-
-    def __rmul__(self, other: Union[Decimal, str, int, float, PairSpotPrice]) -> Decimal:
-        return self.__mul__(other)
-
-    def __truediv__(self, other: Union[Decimal, str, int, float, PairSpotPrice]) -> Decimal:
-        second = copy.deepcopy(other)
-        if isinstance(second, PairSpotPrice):
-            assert self.token == other.pair.quote  # 100[USD] / 50[USD/BTC] = 2[BTC]
-            second.price = other.price ** (-1)
-        else:
-            second = other ** (-1)
         return self._safe_mul(self, second)
 
-    def __rtruediv__(self, other: Union[Decimal, str, int, float, PairSpotPrice]) -> Decimal:
+    def __rmul__(self, other: Union[str, int, float, Decimal, PairSpotPrice]) -> Decimal:
+        return self.__mul__(other)
+
+    def __truediv__(self, other: Union[str, int, float, Decimal, PairSpotPrice]) -> Decimal:
+        second = copy.deepcopy(other)
+        # Everything to Decimal
+        if isinstance(second, str) or isinstance(second, int) or isinstance(second, float):
+            second = Decimal(f"{second}")
+        # Check type
+        if not isinstance(second, Decimal) and not isinstance(second, PairSpotPrice):
+            raise TokenArithmeticsException(f"Can't divide {type(self)} / {type(second)}.")
+        if isinstance(second, PairSpotPrice):
+            second = second.inverse  # NOTE using inverse cause loss of precision
+            # second = second.price ** -1
+        else:
+            second = second ** (-1)
+        return self._safe_mul(self, second)
+
+    def __rtruediv__(self, other: Union[str, int, float, Decimal, PairSpotPrice]) -> Decimal:
         second = copy.deepcopy(self)
-        if isinstance(self, TokenAmount):
-            second.amount = self.amount ** (-1)
+        if isinstance(second, str) or isinstance(second, int) or isinstance(second, float):
+            raise TokenArithmeticsException()
         if isinstance(other, PairSpotPrice):
-            # TODO Non trovo il caso d'uso
-            raise NotImplemented
+            raise NotImplementedError()
         return self._safe_mul(other, second)

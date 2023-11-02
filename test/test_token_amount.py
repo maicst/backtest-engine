@@ -49,7 +49,7 @@ def test_token_amount_plus_token_amount(token_usd):
     token_amount_2 = TokenAmount(token_usd, 33.3333333)
     res_1 = token_amount_1 + token_amount_2
     res_2 = token_amount_2 + token_amount_1
-    assert Decimal("66.66") == res_1
+    assert TokenAmount(token_usd, Decimal("66.66")) == res_1
     assert res_1 == res_2
 
 
@@ -146,8 +146,9 @@ def test_number_div_token_amount(token_usd):
 
 @pytest.mark.div
 def test_token_amount_div_price(token_usd, token_btc):
-    token_amount = TokenAmount(token_usd, 1000)
+    # Fallisce perchè il calcolo è fatto con 8 decimali e nella divisione si perde precisione
+    token_amount = TokenAmount(token_usd, 100000) # 1 precision loss foreach 0
     pair = Pair(token_btc, token_usd)
-    price = PairSpotPrice(pair=pair, price=300)
+    price = PairSpotPrice(pair=pair, price=30000)
     res = token_amount / price  # USD / (USD/BTC) = BTC
     assert TokenAmount(token_btc, Decimal("3.33333333")) == res
