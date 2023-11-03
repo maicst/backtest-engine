@@ -34,5 +34,8 @@ class UnknownTokenException(BaseException):
     pass
 
 
-class TokenArithmeticsException(BaseException):
+class TokenArithmeticException(BaseException):
+    pass
+
+class TokenTypeError(TypeError):
     pass
